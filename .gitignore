@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.local
+.pytest_cache/
+*.egg-info/
+.DS_Store
+
+# Debug artifacts (saved collages, ad-hoc reports)
+debug/
+tests/output/
+
+# Personal PDF test docs (keep the folder, ignore its contents)
+samples/inputs/pdfs/*
+!samples/inputs/pdfs/.gitkeep
+!samples/inputs/pdfs/README.md
+
+samples/
+notes/

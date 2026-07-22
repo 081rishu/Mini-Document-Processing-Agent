@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: doc-processing-agent
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # Set the secret value in the Render dashboard (sync: false keeps it out of git).
+      - key: OPENAI_API_KEY
+        sync: false
+      # Optional overrides — sensible defaults live in app/config.py.
+      - key: CLASSIFY_MODEL
+        value: gpt-4o-mini
+      - key: EXTRACT_MODEL
+        value: gpt-4o-mini
+      - key: VERIFY_MODEL
+        value: gpt-4o
+      - key: IMAGE_PAGE_MIN_TOKENS
+        value: "50"
+      - key: CLASSIFY_CONFIDENCE_THRESHOLD
+        value: "0.6"
+      - key: MAX_CONCURRENCY
+        value: "5"
