@@ -12,9 +12,9 @@ auto-generated Swagger docs.
 - **Quick test:**
   ```bash
   curl -s -X POST https://<your-service>.onrender.com/process \
-    -F "files=@samples/inputs/resume_ada.txt" \
-    -F "files=@samples/inputs/invoice_acme.txt" \
-    -F "files=@samples/inputs/agreement_nda.txt" | jq .
+    -F "files=@/path/to/resume.pdf" \
+    -F "files=@/path/to/invoice.pdf" \
+    -F "files=@/path/to/agreement.pdf" | jq .
   ```
 
 ---
@@ -182,8 +182,8 @@ Open `http://localhost:8000` for the upload UI, or:
 
 ```bash
 curl -s -X POST http://localhost:8000/process \
-  -F "files=@samples/inputs/resume_ada.txt" \
-  -F "files=@samples/inputs/invoice_acme.txt" | jq .
+  -F "files=@/path/to/resume.pdf" \
+  -F "files=@/path/to/invoice.pdf" | jq .
 ```
 
 ### Tests
@@ -207,9 +207,8 @@ paths (vision-fail, verify-fail, `other` semantics).
 | `POST` | `/process` | Multipart file upload → full batch report |
 | `GET` | `/docs` | Swagger UI |
 
-Sample input files are in [`samples/inputs/`](samples/inputs/); an illustrative report
-(matching the `/process` schema) is in
-[`samples/outputs/sample_report.json`](samples/outputs/sample_report.json).
+Upload any mix of PDFs, images, DOCX, or text files (resumes, invoices/utility bills,
+agreements, IDs, forms); `/process` returns the full batch report shown above.
 
 ## Deploy (Render, free tier)
 
@@ -226,7 +225,7 @@ manylinux wheels, so no system packages needed).
 ## What I'd change for production
 
 Grouped by the three axes that matter most here — **scale, cost, evals** — plus the
-supporting concerns. (A fuller running list lives in [`notes/tradeoffs.txt`](notes/tradeoffs.txt).)
+supporting concerns.
 
 ### Scale
 - **Async job model + durable queue.** The demo is synchronous (internally I/O-concurrent);
@@ -276,8 +275,6 @@ app/
   static/    index.html
 tests/       test_confidence.py  test_schemas.py  test_verify.py  test_ingest.py  test_pipeline.py
 scripts/     run_pipeline.py  process_folder.sh
-samples/     inputs/  outputs/
-notes/       tradeoffs.txt          # running production/scale/cost notes
 Dockerfile   render.yaml   requirements.txt   .env.example
 ```
 
