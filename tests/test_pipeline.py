@@ -102,6 +102,16 @@ async def test_other_type_always_flagged_for_review(fake_client):
     assert any("generic fallback" in f.reason for f in doc.flagged_fields)
 
 
+async def test_zero_fill_first_class_type_flagged(fake_client):
+    # A bare photo misread as an ID: classified id_document but nothing extracted.
+    fake_client(default_letter="D", extract_data={})  # D = id_document
+    report = await process_batch([("photo.txt", b"an ambiguous image")])
+    doc = report.documents[0]
+    assert doc.type is DocType.ID_DOCUMENT
+    assert doc.signals.fill_rate == 0.0
+    assert any("no fields extracted" in f.reason for f in doc.flagged_fields)
+
+
 async def test_missing_logprobs_do_not_tank_confidence(fake_client):
     fake_client(
         empty_distribution=True,

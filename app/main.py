@@ -7,6 +7,7 @@ LLM calls. A minimal upload UI is served at ``/`` and Swagger at ``/docs``.
 from __future__ import annotations
 
 import logging
+import sys
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -17,9 +18,22 @@ from app.config import get_settings
 from app.models.api import BatchReport
 from app.pipeline.orchestrator import process_batch
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s"
-)
+
+def _configure_logging() -> None:
+    """Route our logs to stdout (so hosts don't tag them as errors) and silence the
+    per-request HTTP client chatter that otherwise floods a small instance's logs."""
+    level = getattr(logging, get_settings().log_level.upper(), logging.INFO)
+    logging.basicConfig(
+        level=level,
+        stream=sys.stdout,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+    # These log one INFO line per OpenAI call — pure noise in production logs.
+    for noisy in ("httpx", "httpcore", "openai"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+
+_configure_logging()
 
 app = FastAPI(
     title="Mini Document-Processing Agent",

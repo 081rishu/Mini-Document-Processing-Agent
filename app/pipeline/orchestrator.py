@@ -212,6 +212,19 @@ async def _process_one(
                         reason="unrecognised type — extracted with the generic fallback",
                     )
                 )
+            # A first-class type with ZERO required fields extracted is a strong sign the
+            # document isn't really that type (e.g. a bare photo classified as an ID).
+            elif signals.fill_rate == 0.0:
+                result.flagged_fields.append(
+                    FlaggedItem(
+                        doc=filename,
+                        level="document",
+                        reason=(
+                            f"no fields extracted — likely not a {cls.doc_type.value} "
+                            "or not a document"
+                        ),
+                    )
+                )
             result.status = DocStatus.DONE
 
         except ingest_stage.UnsupportedFileError as exc:

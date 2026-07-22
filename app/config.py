@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     llm_max_retries: int = 3
     llm_timeout_seconds: int = 60
 
+    # Logging: level for our own logs; third-party HTTP client noise is always quieted.
+    # Set to WARNING on a small/free instance to cut log volume to failures + requests.
+    log_level: str = "INFO"
+
     # Debug: when set, the vision collage for each scanned doc is written here as PNG
     # (off by default — the service is otherwise stateless and stores nothing).
     collage_debug_dir: str = ""
