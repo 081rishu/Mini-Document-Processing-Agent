@@ -24,14 +24,38 @@ auto-generated Swagger docs.
 A **per-document state machine** run over the batch with async I/O concurrency and
 per-document isolation. One document's failure never aborts the batch.
 
-```
-        ┌──────────── batch orchestrator (asyncio.gather + Semaphore) ───────────┐
-upload →│ per doc:  INGEST → CLASSIFY → ROUTE → EXTRACT → VERIFY → DONE           │→ SUMMARIZE → report
-        │              └──── any stage raises → FAILED (isolated) ────────────────┘│
-        └────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    U([Upload: mixed documents]) --> O{{Batch orchestrator<br/>async fan-out + semaphore · per-document isolation}}
+    O -->|each document| ING
+
+    subgraph DOC [Per-document state machine]
+        direction TB
+        ING[INGEST<br/>parse text · scanned pages → collage → vision]
+        CLS[CLASSIFY<br/>single letter + logprobs]
+        RT[ROUTE<br/>schema registry lookup]
+        EXT[EXTRACT<br/>structured outputs · null-not-guess]
+        VER[VERIFY<br/>deterministic checks + LLM grounding]
+        CONF[CONFIDENCE<br/>composite signals + flagging]
+        ING --> CLS --> RT --> EXT --> VER --> CONF --> DONE([DONE])
+    end
+
+    DONE --> SUM[SUMMARIZE]
+    SUM --> RPT[(Batch report<br/>results · failures · review queue)]
+
+    %% fatal stages fail the doc in isolation; the batch still completes
+    ING -. parse error .-> FAIL([FAILED<br/>isolated · batch continues])
+    EXT -. schema error .-> FAIL
+    FAIL --> SUM
+
+    %% enhancement stages degrade instead of failing the document
+    ING -. vision fails .-> DEG[/enhancement failure:<br/>flag + continue, doc not failed/]
+    VER -. verify fails .-> DEG
 ```
 
-`PENDING → INGESTED → CLASSIFIED → EXTRACTED → VERIFIED → DONE`, or `FAILED` from any stage.
+State: `PENDING → INGESTED → CLASSIFIED → EXTRACTED → VERIFIED → DONE`, or `FAILED` from a
+fatal stage. **Fatal** stages (parse, extract) fail the document in isolation; **enhancement**
+stages (vision, verify) degrade with a flag and let the document complete.
 
 | Stage | File | What it does |
 |-------|------|--------------|
