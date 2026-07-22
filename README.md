@@ -59,7 +59,7 @@ stages (vision, verify) degrade with a flag and let the document complete.
 
 | Stage | File | What it does |
 |-------|------|--------------|
-| **Ingest** | [`app/pipeline/ingest.py`](app/pipeline/ingest.py) | Parse PDF / image / DOCX / text → text. **Page triage:** any PDF page with < `IMAGE_PAGE_MIN_TOKENS` extractable text is treated as a scan; those pages are rasterized into a **labelled `Page N` collage** read by the vision model in one cheap call, and the extracted text carries matching `[Page N]` markers so text and scanned pages stay interleaved. |
+| **Ingest** | [`app/pipeline/ingest.py`](app/pipeline/ingest.py) | Parse PDF / image / DOCX / text. **Page triage:** PDF pages under `IMAGE_PAGE_MIN_TOKENS` are treated as scans → rasterized into a labelled `Page N` collage read by the vision model in one call; extracted text keeps matching `[Page N]` markers so text and scans stay interleaved. |
 | **Classify** | [`app/pipeline/classify.py`](app/pipeline/classify.py) | Fuse text + vision transcription → document type, emitted as a constrained single-letter choice (`A`–`F`) with **logprobs** so confidence is *measured*, not self-reported. |
 | **Route** | [`app/models/schemas.py`](app/models/schemas.py) | Registry maps type → Pydantic schema + extraction hint. Pure lookup. |
 | **Extract** | [`app/pipeline/extract.py`](app/pipeline/extract.py) | OpenAI **structured outputs** constrained to the routed schema; "null, never guess". |
@@ -80,15 +80,11 @@ documents need a genuinely different schema — an invoice and a utility bill sh
 shape, an invoice and an ID card do not), not by enumerating topics. Adding a type is
 a **one-entry change** to the registry in [`schemas.py`](app/models/schemas.py).
 
-`other` is a *structured* fallback, not a dead end: it still returns a best-guess
-type, a summary, and salient entities/dates/amounts/key-values — so an unseen document
-(a medical report, say) yields useful data instead of nothing. (Its schema uses a list
-of key/value pairs rather than an open-ended dict, because OpenAI strict
-structured-outputs forbids free-form objects.)
-
-The **orchestrator** ([`app/pipeline/orchestrator.py`](app/pipeline/orchestrator.py))
-drives the state machine, computes the composite confidence, and fans the batch out
-concurrently under a semaphore.
+`other` is a *structured* fallback, not a dead end — it returns a best-guess type,
+summary, and salient entities/dates/amounts, so an unseen doc (a medical report, say)
+still yields useful data. (It uses a list of key/value pairs, not an open-ended dict,
+which OpenAI strict outputs forbid.) The orchestrator
+([`app/pipeline/orchestrator.py`](app/pipeline/orchestrator.py)) drives all of this.
 
 ### Input formats
 
@@ -104,12 +100,10 @@ Asking the model for `"confidence": 0.8` is miscalibrated and indefensible. Inst
 classification confidence is a **composite of three independent signals**:
 
 1. **Logprob margin (primary).** Classification is a constrained *single-token letter*
-   choice (`A`–`F`), so `top_logprobs` gives a real probability distribution over the
-   classes. We convert `p = exp(logprob)`, **sum mass across token variants** that map to
-   the same letter, renormalize, and use `p_top1` and the **margin `p_top1 − p_top2`** — a
-   small margin (e.g. 0.44 vs 0.39) is exactly the ambiguous case we flag. Single-token
-   letters guarantee *one token = one decision* (word labels tokenize to several tokens
-   and would only expose the first).
+   choice (`A`–`F`), so `top_logprobs` gives a real distribution over the classes. We take
+   `p = exp(logprob)` (summing mass across token variants) and use `p_top1` and the
+   **margin `p_top1 − p_top2`** — a small margin (0.44 vs 0.39) is the ambiguous case we
+   flag. Single-token letters keep it *one token = one decision*.
 2. **Cross-modal agreement.** When a document had image pages, the text-only read and the
    vision-informed read are compared; disagreement is a strong flag.
 3. **Schema fill rate.** The fraction of the predicted type's required fields that came
@@ -120,11 +114,10 @@ classification confidence is a **composite of three independent signals**:
 disagreement (see `composite_confidence` in the orchestrator). Documents below
 `CLASSIFY_CONFIDENCE_THRESHOLD` are flagged with **which signals were weak**.
 
-Two edge cases handled deliberately: when the model returns **no usable logprobs**, the
-signal is treated as *unavailable* (a neutral prior) rather than zero — a missing
-measurement must not silently flag the whole batch. And the `other` fallback never reads
-as high-quality: it has no required fields (fill rate is `None`, not a misleading `1.0`)
-and is **always** flagged for human review, since we have no dedicated schema for it.
+Two edge cases handled: **no usable logprobs** → the signal is *unavailable* (a neutral
+prior), not zero, so a missing measurement can't silently flag the batch. And `other`
+never reads as high-quality — its fill rate is `None` (not a misleading `1.0`) and it's
+**always** flagged for review.
 
 ## Hallucination mitigation
 
