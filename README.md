@@ -122,14 +122,28 @@ never reads as high-quality — its fill rate is `None` (not a misleading `1.0`)
 ### Measuring reliability
 
 Confidence is only useful if it's *reliable*, so every report carries label-free
-reliability metrics (`summary.reliability`):
+reliability metrics (`summary.reliability`, computed in
+[`summarize.py`](app/pipeline/summarize.py)):
 
-- **`hallucination_rate`** — fields the verifier nulled as unsupported ÷ fields it judged
-  (kept + nulled). An LLM-judged proxy, computed for free from the grounding pass.
-- **`deterministic_violation_rate`** — documents with a rule violation (invoice
-  arithmetic, date ordering, format). Rule-based, so closer to ground truth.
+**`hallucination_rate`** — derived from the verify grounding pass. For each document that
+ran grounding, the verifier judges every non-null extracted field and *nulls* the ones it
+can't support from the source. Then, across those documents:
 
-These are *relative* signals — no labels needed. Proving the confidence score itself is
+```
+hallucination_rate = hallucinated_fields / (hallucinated_fields + kept_fields)
+```
+- `hallucinated_fields` — values the verifier nulled as unsupported (flag `category="hallucination"`)
+- `kept_fields` — non-null leaf values still present after verify (counted recursively)
+- denominator = every field the verifier actually looked at (nulled + kept)
+- only documents where grounding ran are counted (`other` / no-source docs are excluded)
+
+It's an **LLM-judged proxy** (the verifier is itself a model), so it's paired with:
+
+**`deterministic_violation_rate`** — `docs with ≥1 rule violation / succeeded`, where
+violations are rule-based (invoice arithmetic, date ordering, email/phone format) and thus
+closer to ground truth.
+
+Both are *relative* signals — no labels needed. Proving the confidence score itself is
 calibrated needs a golden set (see [Evals](#evals)).
 
 ## Hallucination mitigation
