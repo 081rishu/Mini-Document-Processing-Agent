@@ -43,6 +43,10 @@ class ConfidenceSignals(BaseModel):
 class FlaggedItem(BaseModel):
     doc: str
     level: str  # "document" | "field"
+    # Machine-readable flag class, e.g. "hallucination", "deterministic",
+    # "low_confidence", "fallback_type", "no_extraction", "vision_failed",
+    # "verify_failed", "low_grounding". Drives the reliability metrics.
+    category: str | None = None
     field: str | None = None
     reason: str
     confidence: float | None = None
@@ -63,8 +67,23 @@ class DocumentResult(BaseModel):
     data: dict[str, Any] | None = None
     flagged_fields: list[FlaggedItem] = Field(default_factory=list)
     signals: ConfidenceSignals | None = None
+    grounded: bool = False  # whether the LLM grounding/verify pass ran on this doc
     error: str | None = None
     failed_stage: str | None = None
+
+
+class ReliabilityMetrics(BaseModel):
+    """How much to trust this batch's output — measurable without ground-truth labels.
+
+    Hallucination is what the verifier caught (LLM-judged, a proxy); deterministic
+    violations are rule-based (arithmetic/date/format — closer to ground truth).
+    """
+    docs_verified: int = 0                    # docs that ran the LLM grounding pass
+    fields_extracted: int = 0                 # non-null leaf values kept after verify
+    hallucinated_fields: int = 0              # values nulled as unsupported by the verifier
+    hallucination_rate: float = 0.0           # hallucinated / (kept + hallucinated)
+    deterministic_violations: int = 0         # rule violations (arithmetic/date/format)
+    deterministic_violation_rate: float = 0.0  # docs with >=1 violation / succeeded
 
 
 class BatchSummary(BaseModel):
@@ -73,6 +92,7 @@ class BatchSummary(BaseModel):
     failed: int
     by_type: dict[str, int] = Field(default_factory=dict)
     flag_rate: float = 0.0
+    reliability: ReliabilityMetrics = Field(default_factory=ReliabilityMetrics)
     flagged_for_review: list[FlaggedItem] = Field(default_factory=list)
     failures: list[Failure] = Field(default_factory=list)
     total_cost_usd: float = 0.0

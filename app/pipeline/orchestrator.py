@@ -119,7 +119,7 @@ async def _process_one(
                     except Exception as exc:  # noqa: BLE001 - degrade, don't fail
                         ev.signals["vision_failed"] = f"{type(exc).__name__}: {exc}"
                         result.flagged_fields.append(FlaggedItem(
-                            doc=filename, level="document",
+                            doc=filename, level="document", category="vision_failed",
                             reason="vision transcription failed — scanned pages not read",
                         ))
                 result.status = DocStatus.INGESTED
@@ -164,6 +164,7 @@ async def _process_one(
             with collector.stage(doc_id, filename, "verify", settings.verify_model) as ev:
                 # Verify is an enhancement — a failure must not discard a good
                 # extraction. Degrade: keep the extracted data, mark it unverified.
+                grounded = False
                 try:
                     ver = await verify_stage.verify(
                         cls.doc_type, ext.data, parsed.text, filename, vlm_notes
@@ -172,12 +173,14 @@ async def _process_one(
                     ev.cost_usd = ver.usage.cost_usd
                     result.data = ver.data
                     result.flagged_fields.extend(ver.flagged_fields)
+                    grounded = ver.grounded
                 except Exception as exc:  # noqa: BLE001 - degrade, don't fail
                     ev.signals["verify_failed"] = f"{type(exc).__name__}: {exc}"
                     result.flagged_fields.append(FlaggedItem(
-                        doc=filename, level="document",
+                        doc=filename, level="document", category="verify_failed",
                         reason="verification skipped (error) — fields not grounded",
                     ))
+                result.grounded = grounded
                 result.status = DocStatus.VERIFIED
 
             # --- CONFIDENCE + FLAGGING ---------------------------------------
@@ -198,6 +201,7 @@ async def _process_one(
                     FlaggedItem(
                         doc=filename,
                         level="document",
+                        category="low_confidence",
                         reason="low classification confidence",
                         confidence=composite,
                         failed_signals=weak,
@@ -209,6 +213,7 @@ async def _process_one(
                     FlaggedItem(
                         doc=filename,
                         level="document",
+                        category="fallback_type",
                         reason="unrecognised type — extracted with the generic fallback",
                     )
                 )
@@ -219,6 +224,7 @@ async def _process_one(
                     FlaggedItem(
                         doc=filename,
                         level="document",
+                        category="no_extraction",
                         reason=(
                             f"no fields extracted — likely not a {cls.doc_type.value} "
                             "or not a document"

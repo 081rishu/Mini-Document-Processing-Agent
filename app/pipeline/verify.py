@@ -44,6 +44,7 @@ class VerifyResult:
     data: dict[str, Any]
     flagged_fields: list[FlaggedItem] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
+    grounded: bool = False  # whether the LLM grounding pass actually ran
 
 
 def _parse_date(value: Any) -> date | None:
@@ -61,7 +62,9 @@ def _deterministic_checks(doc_type: DocType, data: dict[str, Any], filename: str
     flags: list[FlaggedItem] = []
 
     def flag(path: str, reason: str) -> None:
-        flags.append(FlaggedItem(doc=filename, level="field", field=path, reason=reason))
+        flags.append(FlaggedItem(
+            doc=filename, level="field", field=path, reason=reason, category="deterministic"
+        ))
 
     if doc_type is DocType.INVOICE:
         items = [li for li in (data.get("line_items") or []) if isinstance(li, dict)]
@@ -154,7 +157,8 @@ async def verify(
 
     # LLM grounding pass. Skipped for the generic fallback (no schema to ground).
     usage = Usage()
-    if doc_type is not DocType.OTHER and source.strip():
+    grounded = doc_type is not DocType.OTHER and bool(source.strip())
+    if grounded:
         outcome = await get_client().parse(
             model=get_settings().verify_model,
             system=VERIFY_SYSTEM,
@@ -168,13 +172,13 @@ async def verify(
             if not j.supported:
                 _set_by_path(data, j.path, None)
                 flags.append(FlaggedItem(
-                    doc=filename, level="field", field=j.path,
+                    doc=filename, level="field", field=j.path, category="hallucination",
                     reason="unsupported by source (nulled)", confidence=j.confidence,
                 ))
             elif j.confidence < threshold:
                 flags.append(FlaggedItem(
-                    doc=filename, level="field", field=j.path,
+                    doc=filename, level="field", field=j.path, category="low_grounding",
                     reason="low grounding confidence", confidence=j.confidence,
                 ))
 
-    return VerifyResult(data=data, flagged_fields=flags, usage=usage)
+    return VerifyResult(data=data, flagged_fields=flags, usage=usage, grounded=grounded)

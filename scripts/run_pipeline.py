@@ -80,10 +80,16 @@ def main() -> int:
     report = asyncio.run(process_batch(files))
 
     s = report.summary
+    r = s.reliability
     print(f"\nbatch {report.batch_id}")
     print(f"  processed {s.succeeded}/{s.total}  failed {s.failed}  "
           f"flag_rate {s.flag_rate}  cost ${s.total_cost_usd}  {s.duration_ms}ms")
     print(f"  by_type: {s.by_type}")
+    print(f"  reliability: hallucination_rate {r.hallucination_rate} "
+          f"({r.hallucinated_fields}/{r.fields_extracted + r.hallucinated_fields} fields, "
+          f"{r.docs_verified} docs verified) · "
+          f"deterministic_violations {r.deterministic_violations} "
+          f"(rate {r.deterministic_violation_rate})")
     for d in report.documents:
         line = f"  - {d.filename}: {d.type.value if d.type else '-'} " \
                f"[{d.status.value}] conf={d.type_confidence}"

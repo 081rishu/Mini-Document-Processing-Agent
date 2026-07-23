@@ -119,6 +119,19 @@ prior), not zero, so a missing measurement can't silently flag the batch. And `o
 never reads as high-quality — its fill rate is `None` (not a misleading `1.0`) and it's
 **always** flagged for review.
 
+### Measuring reliability
+
+Confidence is only useful if it's *reliable*, so every report carries label-free
+reliability metrics (`summary.reliability`):
+
+- **`hallucination_rate`** — fields the verifier nulled as unsupported ÷ fields it judged
+  (kept + nulled). An LLM-judged proxy, computed for free from the grounding pass.
+- **`deterministic_violation_rate`** — documents with a rule violation (invoice
+  arithmetic, date ordering, format). Rule-based, so closer to ground truth.
+
+These are *relative* signals — no labels needed. Proving the confidence score itself is
+calibrated needs a golden set (see [Evals](#evals)).
+
 ## Hallucination mitigation
 
 - **Structured outputs** constrain the shape — no free-form JSON parsing or repair.
@@ -265,11 +278,16 @@ supporting concerns.
   (escalate to a stronger model only when confidence is low).
 
 ### Evals
-- **Correctness is currently argued, not measured.** Add a golden set with field-level
-  precision/recall/F1, an LLM-as-judge for fuzzy fields, and a regression suite gating deploys.
-- **Confidence calibration.** Add self-consistency (classify N× at temp>0, majority vote)
-  and calibrate the logprob→confidence mapping against the golden set (the weights are
-  hand-tuned today).
+The batch already reports label-free reliability (hallucination + deterministic-violation
+rates); a golden set turns those into measured guarantees:
+- **Extraction quality.** Field-level precision/recall/F1 and a classification confusion
+  matrix over a labeled set; an LLM-as-judge for fuzzy fields; a regression suite gating deploys.
+- **Calibration & flag quality — is the confidence trustworthy?** Reliability diagram +
+  Expected Calibration Error / Brier score for calibration, and precision/recall + **AUROC
+  of the confidence score as an error detector** (does a low flag actually catch the wrong
+  docs?). This is the direct measure of confidence reliability.
+- **Confidence, turned up.** Self-consistency (classify N× at temp>0, majority vote) and
+  calibrate the logprob→confidence mapping against the golden set (weights are hand-tuned today).
 
 ### Supporting
 - **Observability backend** — ship the structured events to Langfuse / Arize Phoenix /

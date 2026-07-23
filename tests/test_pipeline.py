@@ -126,6 +126,21 @@ async def test_missing_logprobs_do_not_tank_confidence(fake_client):
     assert doc.signals.logprob_top1 is None
 
 
+async def test_reliability_metrics_reported(fake_client):
+    # One resume with an email the verifier judges unsupported -> a hallucination.
+    fake_client(
+        letter_rules={"curriculum": "A"},
+        extract_data={"full_name": "Ada Lovelace", "email": "made-up@nowhere.com",
+                      "skills": ["math"]},
+        judgements=[FieldJudgement(path="email", supported=False, confidence=0.1)],
+    )
+    report = await process_batch([("cv.txt", b"Curriculum Vitae of Ada")])
+    rel = report.summary.reliability
+    assert rel.docs_verified == 1
+    assert rel.hallucinated_fields == 1
+    assert 0.0 < rel.hallucination_rate <= 1.0  # caught 1 of the judged fields
+
+
 async def test_low_confidence_document_flagged(fake_client):
     # Ambiguous classification: top1 barely above top2 -> tiny margin -> low composite.
     fake_client(
